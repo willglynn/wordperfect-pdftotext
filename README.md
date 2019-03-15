@@ -6,7 +6,7 @@ This repository contains a patch enabling Poppler to convert characters written 
 Example
 -------
 
-```shell
+```console
 $ wget http://www.illinoiscourts.gov/Opinions/SupremeCourt/2006/June/99977.pdf
 $ pdftotext -f 27 -l 27 99977.pdf - | tail -n 10
 The court Areject[s] the dissent=s attempt@ (slip op. at 11) to
