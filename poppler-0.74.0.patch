@@ -1,0 +1,213 @@
+commit dcd614cbfed0b56ad9a2a5fd1ad9c50b184b23cd
+Author: Will Glynn <will@willglynn.com>
+Date:   Thu Mar 14 16:58:45 2019 -0500
+
+    Add WPTypographicSymbols support (#740)
+
+diff --git a/poppler/GfxFont.cc b/poppler/GfxFont.cc
+index 41b8bb95..99fb36db 100644
+--- a/poppler/GfxFont.cc
++++ b/poppler/GfxFont.cc
+@@ -1242,11 +1242,15 @@ Gfx8BitFont::Gfx8BitFont(XRef *xref, const char *tagA, Ref idA, GooString *nameA
+   // pass 1: use the name-to-Unicode mapping table
+   missing = hex = false;
+   bool isZapfDingbats = name && name->endsWith("ZapfDingbats");
++  bool isWPTypographicSymbols = name && name->endsWith("WPTypographicSymbols");
+   for (int code = 0; code < 256; ++code) {
+     if ((charName = enc[code])) {
+       if (isZapfDingbats) {
+ 	// include ZapfDingbats names
+ 	toUnicode[code] = globalParams->mapNameToUnicodeAll(charName);
++      } else if (isWPTypographicSymbols) {
++  // include WPTypographicSymbols names
++  toUnicode[code] = globalParams->mapNameToUnicodeWPTypographicSymbols(charName);
+       } else {
+ 	toUnicode[code] = globalParams->mapNameToUnicodeText(charName);
+       }
+diff --git a/poppler/GlobalParams.cc b/poppler/GlobalParams.cc
+index 60d3ca91..b7fcf30d 100644
+--- a/poppler/GlobalParams.cc
++++ b/poppler/GlobalParams.cc
+@@ -393,6 +393,7 @@ GlobalParams::GlobalParams(const char *customPopplerDataDir)
+   }
+ 
+   nameToUnicodeZapfDingbats = new NameToCharCode();
++  nameToUnicodeWPTypographicSymbols = new NameToCharCode();
+   nameToUnicodeText = new NameToCharCode();
+   toUnicodeDirs = new GooList();
+   sysFonts = new SysFontList();
+@@ -424,7 +425,11 @@ GlobalParams::GlobalParams(const char *customPopplerDataDir)
+   for (int i = 0; nameToUnicodeZapfDingbatsTab[i].name; ++i) {
+     nameToUnicodeZapfDingbats->add(nameToUnicodeZapfDingbatsTab[i].name, nameToUnicodeZapfDingbatsTab[i].u);
+   }
+-
++  
++  for (int i = 0; nameToUnicodeWPTypographicSymbolsTab[i].name; ++i) {
++    nameToUnicodeWPTypographicSymbols->add(nameToUnicodeWPTypographicSymbolsTab[i].name, nameToUnicodeWPTypographicSymbolsTab[i].u);
++  }
++  
+   for (int i = 0; nameToUnicodeTextTab[i].name; ++i) {
+     nameToUnicodeText->add(nameToUnicodeTextTab[i].name, nameToUnicodeTextTab[i].u);
+   }
+@@ -552,6 +557,7 @@ GlobalParams::~GlobalParams() {
+   delete macRomanReverseMap;
+ 
+   delete nameToUnicodeZapfDingbats;
++  delete nameToUnicodeWPTypographicSymbols;
+   delete nameToUnicodeText;
+   deleteGooList<GooString>(toUnicodeDirs);
+   delete sysFonts;
+@@ -580,6 +586,14 @@ Unicode GlobalParams::mapNameToUnicodeAll(const char *charName) {
+   return u;
+ }
+ 
++Unicode GlobalParams::mapNameToUnicodeWPTypographicSymbols(const char *charName) {
++  Unicode u = nameToUnicodeWPTypographicSymbols->lookup(charName);
++  if (!u)
++    u = nameToUnicodeText->lookup(charName);
++  return u;
++}
++
++
+ Unicode GlobalParams::mapNameToUnicodeText(const char *charName) {
+   // no need to lock - nameToUnicodeText is constant
+   return nameToUnicodeText->lookup(charName);
+diff --git a/poppler/GlobalParams.h b/poppler/GlobalParams.h
+index 365c4895..cf81cb56 100644
+--- a/poppler/GlobalParams.h
++++ b/poppler/GlobalParams.h
+@@ -118,6 +118,10 @@ public:
+   // Return Unicode values for character names.  Used for glyph
+   // lookups or text extraction with ZapfDingbats fonts.
+   Unicode mapNameToUnicodeAll(const char *charName);
++  
++  // Return Unicode values for character names.  Used for glyph
++  // lookups or text extraction with WPTypographicSymbols fonts.
++  Unicode mapNameToUnicodeWPTypographicSymbols(const char *charName);
+ 
+   UnicodeMap *getResidentUnicodeMap(const GooString *encodingName);
+   FILE *getUnicodeMapFile(const GooString *encodingName);
+@@ -182,6 +186,8 @@ private:
+ 
+   NameToCharCode *		// mapping from char name to Unicode for ZapfDingbats
+     nameToUnicodeZapfDingbats;
++  NameToCharCode *    // mapping from char name to Unicode for WPTypographicSymbols
++    nameToUnicodeWPTypographicSymbols;
+   NameToCharCode *		// mapping from char name to Unicode for text
+     nameToUnicodeText;		// extraction
+   // files for mappings from char collections
+diff --git a/poppler/NameToUnicodeTable.h b/poppler/NameToUnicodeTable.h
+index 7345eabc..fb6c3e8b 100644
+--- a/poppler/NameToUnicodeTable.h
++++ b/poppler/NameToUnicodeTable.h
+@@ -4482,3 +4482,110 @@ static struct NameToUnicodeTab nameToUnicodeZapfDingbatsTab[] = {
+   {0x2720, "a9"},
+   { 0, nullptr }
+ };
++
++// map WPTypographicSymbols names to Unicode
++static struct NameToUnicodeTab nameToUnicodeWPTypographicSymbolsTab[] = {
++  {0x2022,  "exclamleft"},
++  {0x25e6,  "quotedbl"},
++  {0x25fc,  "numbersign"},
++  {0x30fb,  "dollar"},
++  {0x204e,  "percent"},
++  {0xb6,    "ampersand"},
++  {0xa7,    "quotesingle"},
++  {0xa1,    "parenleft"},
++  {0xbf,    "parenright"},
++  {0xab,    "asterisk"},
++  {0xbb,    "plus"},
++  {0xa3,    "comma"},
++  {0xa5,    "hyphen"},
++  {0x20a7,  "period"},
++  {0x192,   "slash"},
++  {0xaa,    "zero"},
++  {0xba,    "one"},
++  {0xbd,    "two"},
++  {0xbc,    "three"},
++  {0xa2,    "four"},
++  {0xb2,    "five"},
++  {0x207f,  "six"},
++  {0xae,    "seven"},
++  {0xa9,    "eight"},
++  {0xa4,    "nine"},
++  {0xbe,    "colon"},
++  {0xb3,    "semicolon"},
++  {0x201b,  "less"},
++  {0x2019,  "equal"},
++  {0x2018,  "greater"},
++  {0x201f,  "question"},
++  {0x201d,  "at"},
++  {0x201c,  "A"},
++  {0x2013,  "B"},
++  {0x2014,  "C"},
++  {0x2039,  "D"},
++  {0x203a,  "E"},
++  {0x25cb,  "F"},
++  {0x25a1,  "G"},
++  {0x2020,  "H"},
++  {0x2021,  "I"},
++  {0x2122,  "J"},
++  {0x2120,  "K"},
++  {0x211e,  "L"},
++  {0x25cf,  "M"},
++  {0x25e6,  "N"},
++  {0x25a0,  "O"},
++  {0x25fc,  "P"},
++  {0x2610,  "Q"},
++  {0x25fb,  "R"},
++  {0x2012,  "S"},
++  {0xfb00,  "T"},
++  {0xfb03,  "U"},
++  {0xfb04,  "V"},
++  {0xfb01,  "W"},
++  {0xfb02,  "X"},
++  {0x2026,  "Y"},
++  {0x24,    "Z"},
++  {0x20a3,  "bracketleft"},
++  {0x20a2,  "backslash"},
++  {0x20a0,  "bracketright"},
++  {0x20a4,  "asciicircum"},
++  {0x201a,  "underscore"},
++  {0x201e,  "grave"},
++  {0x2153,  "a"},
++  {0x2154,  "b"},
++  {0x215b,  "c"},
++  {0x215c,  "d"},
++  {0x215d,  "e"},
++  {0x215e,  "f"},
++  {0x24c2,  "g"},
++  {0x2117,  "h"},
++  {0x20ac,  "i"},
++  {0x2105,  "j"},
++  {0x2106,  "k"},
++  {0x2030,  "l"},
++  {0x2116,  "m"},
++  {0x2010,  "n"},
++  {0xb9,    "o"},
++  {0x1f137, "p"},
++  {0x1f135, "q"},
++  {0x1f132, "r"},
++  {0x1f13b, "s"},
++  {0x1f13d, "t"},
++  {0x1f145, "u"},
++  {0x267c,  "v"},
++  {0x20a9,  "w"},
++  {0x20a6,  "x"},
++  {0x20a8,  "y"},
++  {0x1f16b, "z"},
++  {0x1f16a, "{"},
++  {0x25b6,  "|"},
++  {0x23f9,  "}"},
++  {0x23f8,  "~"},
++  {0x23ee,  "florin"},
++  {0x20aa,  "circumflex"},
++  {0xa5,    "hyphentwo"},
++  {0x23fa,  "quotesinglbase"},
++  {0x23ed,  "quotedblbase"},
++  {0x1d11e, "dagger"},
++  {0x1d122, "daggerdbl"},
++  {0x23cf,  "ellipsis"},
++  { 0, nullptr }
++};
